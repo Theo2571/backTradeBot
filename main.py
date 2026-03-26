@@ -176,13 +176,15 @@ def _handle_signal(signum, frame) -> None:
 
 
 if __name__ == "__main__":
+    import os
+
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=int(os.environ.get("PORT", 8000)),
         reload=False,  # Never use reload=True in production
         log_level="info",
         access_log=True,

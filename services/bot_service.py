@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Optional
 
 from config.logging_config import get_logger
@@ -628,6 +628,16 @@ class BotService:
             return
 
         sym_info = await self._client.get_symbol_info(self._cycle.symbol)
+
+        # Quantize net_qty to exchange LOT_SIZE step — raw qty after commission
+        # subtraction may have more decimal places than Binance allows (e.g.
+        # 0.00031968 vs step_size 0.00001), causing -1013 filter failure.
+        quantize_qty = Decimal(10) ** -sym_info.qty_precision
+        net_qty = net_qty.quantize(quantize_qty, rounding=ROUND_DOWN)
+
+        if net_qty <= 0:
+            logger.warning("net_qty_zero_after_quantize", net_qty=str(net_qty))
+            return
 
         # Calculate take-profit price
         sell_price = calculate_take_profit_price(
