@@ -126,6 +126,7 @@ def create_app() -> FastAPI:
         "http://127.0.0.1:5173",
         "http://localhost:4173",   # vite preview
         "http://127.0.0.1:4173",
+        "https://web-production-2f4c8.up.railway.app",
     ]
     app.add_middleware(
         CORSMiddleware,
