@@ -1,0 +1,39 @@
+# Секреты
+.env
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Тесты и покрытие
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Линтеры
+.mypy_cache/
+.ruff_cache/
+
+# Логи
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

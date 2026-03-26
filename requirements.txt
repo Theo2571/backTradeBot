@@ -1,0 +1,29 @@
+# ============================================================
+# Binance DCA Bot — Python Dependencies
+# ============================================================
+# Pin exact versions for reproducibility in production.
+# Run: pip install -r requirements.txt
+
+# Web framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# Binance API
+python-binance==1.0.19
+
+# Settings / validation
+pydantic==2.11.3
+pydantic-settings==2.8.1
+
+# Structured logging
+structlog==24.4.0
+
+# Async / concurrency (standard library — listed for documentation)
+# asyncio is part of stdlib (Python 3.10+)
+
+# Development / testing (optional — not needed for production)
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0
+httpx==0.28.0          # For FastAPI TestClient async support
+python-dotenv==1.0.1   # Loaded automatically by pydantic-settings
