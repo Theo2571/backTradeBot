@@ -518,11 +518,14 @@ class BotService:
                 # Fetch real commission from trade history — GET /api/v3/order
                 # does NOT return fills for resting limit orders, only the
                 # initial POST response does.  myTrades is the only reliable source.
+                # Pass base_asset so we only count commission paid in BTC (not BNB).
+                sym_info = await self._client.get_symbol_info(updated.symbol)
                 commission = await self._fetch_order_commission(
-                    updated.symbol, updated.binance_order_id
+                    updated.symbol, updated.binance_order_id, sym_info.base_asset
                 )
                 if commission > Decimal("0"):
                     updated = updated.model_copy_updated(commission=commission)
+                    self._cycle.buy_orders[i] = updated  # persist commission into cycle state
 
                 logger.info(
                     "buy_order_filled",
@@ -541,6 +544,25 @@ class BotService:
         assert self._cycle is not None
 
         sell = self._cycle.sell_order
+
+        # If sell is missing or rejected but we have filled buys → retry placement.
+        # This recovers the bot from a transient sell-placement failure without
+        # requiring a restart (which would lose all in-memory state).
+        if self._cycle.filled_buy_orders:
+            sell_needs_retry = sell is None or sell.status in (
+                OrderStatus.REJECTED,
+                OrderStatus.CANCELED,
+                OrderStatus.EXPIRED,
+            )
+            if sell_needs_retry:
+                logger.warning(
+                    "sell_order_missing_or_failed_retrying",
+                    sell_status=sell.status.value if sell else None,
+                    filled_count=len(self._cycle.filled_buy_orders),
+                )
+                await self._update_sell_order()
+                return
+
         if sell is None or not sell.is_active:
             return
         if sell.binance_order_id is None:
@@ -762,20 +784,29 @@ class BotService:
         await self._place_buy_orders()
 
     async def _fetch_order_commission(
-        self, symbol: str, order_id: Optional[int]
+        self, symbol: str, order_id: Optional[int], base_asset: str = ""
     ) -> Decimal:
         """
         Return total base-asset commission for a filled order.
 
         Calls GET /api/v3/myTrades with orderId.  Returns Decimal("0") on any
         error so a commission fetch failure never blocks the sell placement.
+
+        Args:
+            base_asset: If provided, only sums commissions paid in this asset
+                        (e.g. "BTC"). Filters out BNB commissions which must
+                        NOT be subtracted from base-asset quantity.
         """
         if order_id is None:
             return Decimal("0")
         try:
             trades = await self._client.get_order_trades(symbol, order_id)
             return sum(
-                (Decimal(t.get("commission", "0")) for t in trades),
+                (
+                    Decimal(t.get("commission", "0"))
+                    for t in trades
+                    if not base_asset or t.get("commissionAsset", "") == base_asset
+                ),
                 Decimal("0"),
             )
         except BinanceClientError as exc:

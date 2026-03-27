@@ -395,7 +395,9 @@ class BinanceClient:
         client_order_id: str,
     ) -> dict:
         """Build a fake Binance order response for dry-run mode."""
-        fake_id = int(time.time() * 1000) % 1_000_000_000
+        # Use hash of client_order_id so each simulated order gets a stable,
+        # unique orderId even when orders are placed in rapid succession.
+        fake_id = abs(hash(client_order_id)) % 1_000_000_000
         logger.info(
             "dry_run_order_simulated",
             symbol=symbol,

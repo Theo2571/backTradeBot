@@ -181,6 +181,17 @@ def build_grid(config: GridConfig) -> list[GridLevel]:
             "This can happen due to rounding; try reducing grid_levels or qty_precision."
         )
 
+    # Sanity check: all prices must be unique after quantization.
+    # A very small grid_range_percent combined with many levels can cause
+    # the step to round to zero, producing duplicate prices.
+    prices_set = {lvl.price for lvl in levels}
+    if len(prices_set) < len(levels):
+        raise ValueError(
+            f"Grid produced duplicate prices after quantization "
+            f"({len(levels) - len(prices_set)} duplicate(s)). "
+            "Increase grid_range_percent or reduce orders count."
+        )
+
     return levels
 
 
