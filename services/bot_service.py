@@ -876,8 +876,11 @@ class BotService:
                     message="Open orders from a previous session were cancelled before starting.",
                 )
         except BinanceClientError as exc:
-            # Non-fatal — log and continue; worst case we place on top of old orders.
             logger.error("orphan_cleanup_failed", error=str(exc))
+            raise RuntimeError(
+                f"Cannot start: failed to cancel existing open orders for {s.symbol}. "
+                "Please cancel them manually on Binance and try again."
+            ) from exc
 
         # 2. Fetch symbol info and market price (needed for validation regardless of dry_run).
         sym_info = await self._client.get_symbol_info(s.symbol)
