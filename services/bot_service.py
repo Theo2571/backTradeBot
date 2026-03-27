@@ -358,6 +358,18 @@ class BotService:
         # 2. Get symbol precision info
         sym_info = await self._client.get_symbol_info(self._settings.symbol)
 
+        # 2a. Balance check before every cycle (not just on manual Start).
+        #     Stops the bot cleanly if the account no longer has enough funds
+        #     instead of silently placing only part of the grid.
+        if not self._settings.dry_run:
+            balance = await self._client.get_account_balance(sym_info.quote_asset)
+            if balance < self._settings.deposit_amount:
+                raise InsufficientBalanceError(
+                    f"Insufficient {sym_info.quote_asset} balance to start a new cycle. "
+                    f"Have: {balance:.2f}, Need: {self._settings.deposit_amount:.2f}. "
+                    "Top up your account or reduce the deposit amount."
+                )
+
         # 3. Build grid
         grid_config = GridConfig(
             market_price=market_price,
@@ -866,21 +878,37 @@ class BotService:
 
         # 1. Orphan cleanup — cancel any open orders from a previous bot session.
         #    In dry-run mode cancel_all_open_orders is a no-op that returns [].
-        try:
-            cancelled = await self._client.cancel_all_open_orders(s.symbol)
-            if cancelled:
+        _max_cleanup_attempts = 3
+        _last_cleanup_exc: Optional[BinanceClientError] = None
+        for _attempt in range(1, _max_cleanup_attempts + 1):
+            try:
+                cancelled = await self._client.cancel_all_open_orders(s.symbol)
+                if cancelled:
+                    logger.warning(
+                        "orphaned_orders_cancelled",
+                        count=len(cancelled),
+                        symbol=s.symbol,
+                        message="Open orders from a previous session were cancelled before starting.",
+                    )
+                _last_cleanup_exc = None
+                break
+            except BinanceClientError as exc:
+                _last_cleanup_exc = exc
                 logger.warning(
-                    "orphaned_orders_cancelled",
-                    count=len(cancelled),
-                    symbol=s.symbol,
-                    message="Open orders from a previous session were cancelled before starting.",
+                    "orphan_cleanup_attempt_failed",
+                    attempt=_attempt,
+                    max_attempts=_max_cleanup_attempts,
+                    error=str(exc),
                 )
-        except BinanceClientError as exc:
-            logger.error("orphan_cleanup_failed", error=str(exc))
+                if _attempt < _max_cleanup_attempts:
+                    await asyncio.sleep(2.0)
+        if _last_cleanup_exc is not None:
+            logger.error("orphan_cleanup_all_attempts_failed", error=str(_last_cleanup_exc))
             raise RuntimeError(
-                f"Cannot start: failed to cancel existing open orders for {s.symbol}. "
+                f"Cannot start: failed to cancel existing open orders for {s.symbol} "
+                f"after {_max_cleanup_attempts} attempts. "
                 "Please cancel them manually on Binance and try again."
-            ) from exc
+            ) from _last_cleanup_exc
 
         # 2. Fetch symbol info and market price (needed for validation regardless of dry_run).
         sym_info = await self._client.get_symbol_info(s.symbol)
