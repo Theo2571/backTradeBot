@@ -326,6 +326,12 @@ class BotService:
                 if self._stop_event.is_set():
                     break
 
+                # Cancel any unfilled BUY orders left in the completed cycle
+                # so their locked USDT is released before the balance check
+                # in the next cycle.
+                if self._cycle is not None:
+                    await self._cancel_buy_orders()
+
                 self._cycles_completed += 1
                 logger.info(
                     "cycle_completed",
